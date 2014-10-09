@@ -1,14 +1,14 @@
 require 'active_record/connection_adapters/abstract_adapter'
 require 'active_record/connection_adapters/statement_pool'
 
-require 'active_record/connection_adapters/postgresql/utils'
-require 'active_record/connection_adapters/postgresql/column'
-require 'active_record/connection_adapters/postgresql/oid'
-require 'active_record/connection_adapters/postgresql/quoting'
-require 'active_record/connection_adapters/postgresql/referential_integrity'
-require 'active_record/connection_adapters/postgresql/schema_definitions'
-require 'active_record/connection_adapters/postgresql/schema_statements'
-require 'active_record/connection_adapters/postgresql/database_statements'
+require 'active_record/connection_adapters/redshift/utils'
+require 'active_record/connection_adapters/redshift/column'
+require 'active_record/connection_adapters/redshift/oid'
+require 'active_record/connection_adapters/redshift/quoting'
+require 'active_record/connection_adapters/redshift/referential_integrity'
+require 'active_record/connection_adapters/redshift/schema_definitions'
+require 'active_record/connection_adapters/redshift/schema_statements'
+require 'active_record/connection_adapters/redshift/database_statements'
 
 require 'arel/visitors/bind_visitor'
 
@@ -27,7 +27,7 @@ module ActiveRecord
                          :sslrootcert, :sslcrl, :requirepeer, :krbsrvname, :gsslib, :service]
 
     # Establishes a connection to the database that's used by all Active Record objects
-    def postgresql_connection(config)
+    def redshift_connection(config)
       conn_params = config.symbolize_keys
 
       conn_params.delete_if { |_, v| v.nil? }
@@ -41,7 +41,7 @@ module ActiveRecord
 
       # The postgres drivers don't allow the creation of an unconnected PGconn object,
       # so just pass a nil connection object for the time being.
-      ConnectionAdapters::PostgreSQLAdapter.new(nil, logger, conn_params, config)
+      ConnectionAdapters::RedshiftAdapter.new(nil, logger, conn_params, config)
     end
   end
 
@@ -73,8 +73,8 @@ module ActiveRecord
     #
     # In addition, default connection parameters of libpq can be set per environment variables.
     # See http://www.postgresql.org/docs/9.1/static/libpq-envars.html .
-    class PostgreSQLAdapter < AbstractAdapter
-      ADAPTER_NAME = 'PostgreSQL'.freeze
+    class RedshiftAdapter < AbstractAdapter
+      ADAPTER_NAME = 'Redshift'.freeze
 
       NATIVE_DATABASE_TYPES = {
         primary_key: "serial primary key",
@@ -110,16 +110,16 @@ module ActiveRecord
         money:       { name: "money" },
       }
 
-      OID = PostgreSQL::OID #:nodoc:
+      OID = Redshift::OID #:nodoc:
 
-      include PostgreSQL::Quoting
-      include PostgreSQL::ReferentialIntegrity
-      include PostgreSQL::SchemaStatements
-      include PostgreSQL::DatabaseStatements
+      include Redshift::Quoting
+      include Redshift::ReferentialIntegrity
+      include Redshift::SchemaStatements
+      include Redshift::DatabaseStatements
       include Savepoints
 
       def schema_creation # :nodoc:
-        PostgreSQL::SchemaCreation.new self
+        Redshift::SchemaCreation.new self
       end
 
       # Adds `:array` option to the default set provided by the
@@ -240,8 +240,8 @@ module ActiveRecord
         @statements = StatementPool.new @connection,
                                         self.class.type_cast_config_to_integer(config.fetch(:statement_limit) { 1000 })
 
-        if postgresql_version < 80200
-          raise "Your version of PostgreSQL (#{postgresql_version}) is too old, please upgrade!"
+        if redshift_version < 80200
+          raise "Your version of Redshift (#{redshift_version}) is too old, please upgrade!"
         end
 
         @type_map = Type::HashLookupTypeMap.new
@@ -323,16 +323,16 @@ module ActiveRecord
 
       # Returns true if pg > 9.1
       def supports_extensions?
-        postgresql_version >= 90100
+        redshift_version >= 90100
       end
 
       # Range datatypes weren't introduced until PostgreSQL 9.2
       def supports_ranges?
-        postgresql_version >= 90200
+        redshift_version >= 90200
       end
 
       def supports_materialized_views?
-        postgresql_version >= 90300
+        redshift_version >= 90300
       end
 
       def enable_extension(name)
@@ -383,7 +383,7 @@ module ActiveRecord
       end
 
       def update_table_definition(table_name, base) #:nodoc:
-        PostgreSQL::Table.new(table_name, base)
+        Redshift::Table.new(table_name, base)
       end
 
       def lookup_cast_type(sql_type) # :nodoc:
@@ -394,7 +394,7 @@ module ActiveRecord
       protected
 
         # Returns the version of the connected PostgreSQL server.
-        def postgresql_version
+        def redshift_version
           @connection.server_version
         end
 
@@ -639,7 +639,7 @@ module ActiveRecord
           # Money type has a fixed precision of 10 in PostgreSQL 8.2 and below, and as of
           # PostgreSQL 8.3 it has a fixed precision of 19. PostgreSQLColumn.extract_precision
           # should know about this but can't detect it there, so deal with it here.
-          OID::Money.precision = (postgresql_version >= 80300) ? 19 : 10
+          OID::Money.precision = (redshift_version >= 80300) ? 19 : 10
 
           configure_connection
         rescue ::PG::Error => error
@@ -739,7 +739,7 @@ module ActiveRecord
         end
 
         def create_table_definition(name, temporary, options, as = nil) # :nodoc:
-          PostgreSQL::TableDefinition.new native_database_types, name, temporary, options, as
+          Redshift::TableDefinition.new native_database_types, name, temporary, options, as
         end
     end
   end

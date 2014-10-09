@@ -1,6 +1,6 @@
 module ActiveRecord
   module ConnectionAdapters
-    module PostgreSQL
+    module Redshift
       module OID # :nodoc:
         class Uuid < Type::Value # :nodoc:
           RFC_4122 = %r{\A\{?[a-fA-F0-9]{4}-?

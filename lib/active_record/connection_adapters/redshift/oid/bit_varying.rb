@@ -1,6 +1,6 @@
 module ActiveRecord
   module ConnectionAdapters
-    module PostgreSQL
+    module Redshift
       module OID # :nodoc:
         class BitVarying < OID::Bit # :nodoc:
           def type

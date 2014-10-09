@@ -1,6 +1,6 @@
 module ActiveRecord
   module ConnectionAdapters
-    module PostgreSQL
+    module Redshift
       module OID # :nodoc:
         # This class uses the data from PostgreSQL pg_type table to build
         # the OID -> Type mapping.

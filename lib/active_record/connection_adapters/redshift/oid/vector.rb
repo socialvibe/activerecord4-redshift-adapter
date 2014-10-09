@@ -1,6 +1,6 @@
 module ActiveRecord
   module ConnectionAdapters
-    module PostgreSQL
+    module Redshift
       module OID # :nodoc:
         class Vector < Type::Value # :nodoc:
           attr_reader :delim, :subtype

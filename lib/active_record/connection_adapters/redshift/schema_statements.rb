@@ -1,6 +1,6 @@
 module ActiveRecord
   module ConnectionAdapters
-    module PostgreSQL
+    module Redshift
       class SchemaCreation < AbstractAdapter::SchemaCreation
         private
 
@@ -194,7 +194,7 @@ module ActiveRecord
         end
 
         def new_column(name, default, cast_type, sql_type = nil, null = true, default_function = nil) # :nodoc:
-          PostgreSQLColumn.new(name, default, cast_type, sql_type, null, default_function)
+          RedshiftColumn.new(name, default, cast_type, sql_type, null, default_function)
         end
 
         # Returns the current database name.
@@ -283,7 +283,7 @@ module ActiveRecord
           return nil unless result
           Utils.extract_schema_qualified_name(result).to_s
         rescue ActiveRecord::StatementInvalid
-          PostgreSQL::Name.new(nil, "#{table_name}_#{pk || 'id'}_seq").to_s
+          Redshift::Name.new(nil, "#{table_name}_#{pk || 'id'}_seq").to_s
         end
 
         def serial_sequence(table, column)
@@ -361,7 +361,7 @@ module ActiveRecord
 
           pk = result.shift
           if result.last
-            [pk, PostgreSQL::Name.new(*result)]
+            [pk, Redshift::Name.new(*result)]
           else
             [pk, nil]
           end

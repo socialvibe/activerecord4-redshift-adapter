@@ -1,6 +1,6 @@
 module ActiveRecord
   module ConnectionAdapters
-    module PostgreSQL
+    module Redshift
       module OID # :nodoc:
         class SpecializedString < Type::String # :nodoc:
           attr_reader :type

@@ -1,6 +1,6 @@
 module ActiveRecord
   module ConnectionAdapters
-    module PostgreSQL
+    module Redshift
       module ColumnMethods
         def xml(*args)
           options = args.extract_options!
@@ -140,7 +140,7 @@ module ActiveRecord
         private
 
           def create_column_definition(name, type)
-            PostgreSQL::ColumnDefinition.new name, type
+            Redshift::ColumnDefinition.new name, type
           end
       end
 

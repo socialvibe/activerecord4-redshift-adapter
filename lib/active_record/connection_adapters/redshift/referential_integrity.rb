@@ -1,6 +1,6 @@
 module ActiveRecord
   module ConnectionAdapters
-    module PostgreSQL
+    module Redshift
       module ReferentialIntegrity # :nodoc:
         def supports_disable_referential_integrity? # :nodoc:
           true

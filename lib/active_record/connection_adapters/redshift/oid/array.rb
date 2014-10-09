@@ -1,6 +1,6 @@
 module ActiveRecord
   module ConnectionAdapters
-    module PostgreSQL
+    module Redshift
       module OID # :nodoc:
         class Array < Type::Value # :nodoc:
           include Type::Mutable
@@ -13,8 +13,8 @@ module ActiveRecord
             require 'pg_array_parser'
             include PgArrayParser
           rescue LoadError
-            require 'active_record/connection_adapters/postgresql/array_parser'
-            include PostgreSQL::ArrayParser
+            require 'active_record/connection_adapters/redshift/array_parser'
+            include Redshift::ArrayParser
           end
 
           attr_reader :subtype, :delimiter

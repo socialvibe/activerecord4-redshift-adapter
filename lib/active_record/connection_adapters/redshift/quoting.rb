@@ -1,6 +1,6 @@
 module ActiveRecord
   module ConnectionAdapters
-    module PostgreSQL
+    module Redshift
       module Quoting
         # Escapes binary strings for bytea input to the database.
         def escape_bytea(value)

@@ -1,6 +1,6 @@
 module ActiveRecord
   module ConnectionAdapters
-    module PostgreSQL
+    module Redshift
       module OID # :nodoc:
         class Bytea < Type::Binary # :nodoc:
           def type_cast_from_database(value)
