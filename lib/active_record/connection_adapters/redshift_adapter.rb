@@ -244,7 +244,7 @@ module ActiveRecord
         @type_map = Type::HashLookupTypeMap.new
         initialize_type_map(type_map)
         @local_tz = execute('SHOW TIME ZONE', 'SCHEMA').first["TimeZone"]
-        @use_insert_returning = @config.key?(:insert_returning) ? self.class.type_cast_config_to_boolean(@config[:insert_returning]) : true
+        @use_insert_returning = @config.key?(:insert_returning) ? self.class.type_cast_config_to_boolean(@config[:insert_returning]) : false
       end
 
       # Clears the prepared statements cache.
@@ -364,7 +364,7 @@ module ActiveRecord
       end
 
       def use_insert_returning?
-        @use_insert_returning
+        false
       end
 
       def valid_type?(type)
