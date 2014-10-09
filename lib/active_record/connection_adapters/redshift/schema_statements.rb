@@ -94,7 +94,7 @@ module ActiveRecord
 
         # Returns the list of all tables in the schema search path or a specified schema.
         def tables(name = nil)
-          query(<<-SQL, 'SCHEMA').map { |row| row[0] }
+          query(<<-SQL, 'SCHEMA').map { |row| "#{row[0]}.#{row[1]}" }
             SELECT tablename
             FROM pg_tables
             WHERE schemaname = ANY (current_schemas(false))
@@ -142,44 +142,7 @@ module ActiveRecord
 
         # Returns an array of indexes for the given table.
         def indexes(table_name, name = nil)
-           result = query(<<-SQL, 'SCHEMA')
-             SELECT distinct i.relname, d.indisunique, d.indkey, pg_get_indexdef(d.indexrelid), t.oid
-             FROM pg_class t
-             INNER JOIN pg_index d ON t.oid = d.indrelid
-             INNER JOIN pg_class i ON d.indexrelid = i.oid
-             WHERE i.relkind = 'i'
-               AND d.indisprimary = 'f'
-               AND t.relname = '#{table_name}'
-               AND i.relnamespace IN (SELECT oid FROM pg_namespace WHERE nspname = ANY (current_schemas(false)) )
-            ORDER BY i.relname
-          SQL
-
-          result.map do |row|
-            index_name = row[0]
-            unique = row[1] == 't'
-            indkey = row[2].split(" ")
-            inddef = row[3]
-            oid = row[4]
-
-            columns = Hash[query(<<-SQL, "SCHEMA")]
-            SELECT a.attnum, a.attname
-            FROM pg_attribute a
-            WHERE a.attrelid = #{oid}
-            AND a.attnum IN (#{indkey.join(",")})
-            SQL
-
-            column_names = columns.values_at(*indkey).compact
-
-            unless column_names.empty?
-              # add info on sort order for columns (only desc order is explicitly specified, asc is the default)
-              desc_order_columns = inddef.scan(/(\w+) DESC/).flatten
-              orders = desc_order_columns.any? ? Hash[desc_order_columns.map {|order_column| [order_column, :desc]}] : {}
-              where = inddef.scan(/WHERE (.+)$/).flatten[0]
-              using = inddef.scan(/USING (.+?) /).flatten[0].to_sym
-
-              IndexDefinition.new(table_name, index_name, unique, column_names, [], orders, where, nil, using)
-            end
-          end.compact
+          []
         end
 
         # Returns the list of all column definitions for a table.
@@ -265,16 +228,6 @@ module ActiveRecord
         # Returns the active schema search path.
         def schema_search_path
           @schema_search_path ||= query('SHOW search_path', 'SCHEMA')[0][0]
-        end
-
-        # Returns the current client message level.
-        def client_min_messages
-          query('SHOW client_min_messages', 'SCHEMA')[0][0]
-        end
-
-        # Set the client message level.
-        def client_min_messages=(level)
-          execute("SET client_min_messages TO '#{level}'", 'SCHEMA')
         end
 
         # Returns the sequence name for a table's primary key or some other specified key.
@@ -372,11 +325,12 @@ module ActiveRecord
         # Returns just a table's primary key
         def primary_key(table)
           row = exec_query(<<-end_sql, 'SCHEMA').rows.first
-            SELECT attr.attname
+            SELECT DISTINCT attr.attname
             FROM pg_attribute attr
+            INNER JOIN pg_depend dep ON attr.attrelid = dep.refobjid AND attr.attnum = dep.refobjsubid
             INNER JOIN pg_constraint cons ON attr.attrelid = cons.conrelid AND attr.attnum = cons.conkey[1]
             WHERE cons.contype = 'p'
-              AND cons.conrelid = '#{quote_table_name(table)}'::regclass
+              AND dep.refobjid = '#{quote_table_name(table)}'::regclass
           end_sql
 
           row && row.first
@@ -452,16 +406,15 @@ module ActiveRecord
         end
 
         def add_index(table_name, column_name, options = {}) #:nodoc:
-          index_name, index_type, index_columns, index_options, index_algorithm, index_using = add_index_options(table_name, column_name, options)
-          execute "CREATE #{index_type} INDEX #{index_algorithm} #{quote_column_name(index_name)} ON #{quote_table_name(table_name)} #{index_using} (#{index_columns})#{index_options}"
+          # ignore
         end
 
         def remove_index!(table_name, index_name) #:nodoc:
-          execute "DROP INDEX #{quote_table_name(index_name)}"
+          # ignore
         end
 
         def rename_index(table_name, old_name, new_name)
-          execute "ALTER INDEX #{quote_column_name(old_name)} RENAME TO #{quote_table_name(new_name)}"
+          # ignore
         end
 
         def foreign_keys(table_name)

@@ -230,6 +230,7 @@ module ActiveRecord
           @prepared_statements = false
         end
 
+        connection_parameters.delete :prepared_statements
         @connection_parameters, @config = connection_parameters, config
 
         # @local_tz is initialized as nil to avoid warnings when connect tries to use it
@@ -239,10 +240,6 @@ module ActiveRecord
         connect
         @statements = StatementPool.new @connection,
                                         self.class.type_cast_config_to_integer(config.fetch(:statement_limit) { 1000 })
-
-        if redshift_version < 80200
-          raise "Your version of Redshift (#{redshift_version}) is too old, please upgrade!"
-        end
 
         @type_map = Type::HashLookupTypeMap.new
         initialize_type_map(type_map)
@@ -303,14 +300,6 @@ module ActiveRecord
       # Does PostgreSQL support finding primary key on non-Active Record tables?
       def supports_primary_key? #:nodoc:
         true
-      end
-
-      # Enable standard-conforming strings if available.
-      def set_standard_conforming_strings
-        old, self.client_min_messages = client_min_messages, 'panic'
-        execute('SET standard_conforming_strings = on', 'SCHEMA') rescue nil
-      ensure
-        self.client_min_messages = old
       end
 
       def supports_ddl_transactions?
@@ -519,7 +508,7 @@ module ActiveRecord
             when 'true', 'false'
               default
             # Numeric types
-            when /\A\(?(-?\d+(\.\d*)?\)?(::bigint)?)\z/
+            when /\A\(?(-?\d+(\.\d*)?\)?)\z/
               $1
             # Object identifier types
             when /\A-?\d+\z/
@@ -594,11 +583,7 @@ module ActiveRecord
           # prepared statements whose return value may have changed is
           # FEATURE_NOT_SUPPORTED.  Check here for more details:
           # http://git.postgresql.org/gitweb/?p=postgresql.git;a=blob;f=src/backend/utils/cache/plancache.c#l573
-          begin
-            code = pgerror.result.result_error_field(PGresult::PG_DIAG_SQLSTATE)
-          rescue
-            raise e
-          end
+          code = pgerror.result.result_error_field(PGresult::PG_DIAG_SQLSTATE)
           if FEATURE_NOT_SUPPORTED == code
             @statements.delete sql_key(sql)
             retry
@@ -656,20 +641,7 @@ module ActiveRecord
           if @config[:encoding]
             @connection.set_client_encoding(@config[:encoding])
           end
-          self.client_min_messages = @config[:min_messages] || 'warning'
           self.schema_search_path = @config[:schema_search_path] || @config[:schema_order]
-
-          # Use standard-conforming strings if available so we don't have to do the E'...' dance.
-          set_standard_conforming_strings
-
-          # If using Active Record's time zone support configure the connection to return
-          # TIMESTAMP WITH ZONE types in UTC.
-          # (SET TIME ZONE does not use an equals sign like other SET variables)
-          if ActiveRecord::Base.default_timezone == :utc
-            execute("SET time zone 'UTC'", 'SCHEMA')
-          elsif @local_tz
-            execute("SET time zone '#{@local_tz}'", 'SCHEMA')
-          end
 
           # SET statements from :variables config hash
           # http://www.postgresql.org/docs/8.3/static/sql-set.html
