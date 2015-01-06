@@ -4,12 +4,6 @@ module ActiveRecord
       class SchemaCreation < AbstractAdapter::SchemaCreation
         private
 
-        def visit_AddColumn(o)
-          sql_type = type_to_sql(o.type, o.limit, o.precision, o.scale)
-          sql = "ADD COLUMN #{quote_column_name(o.name)} #{sql_type}"
-          add_column_options!(sql, column_options(o))
-        end
-
         def visit_ColumnDefinition(o)
           sql = super
           if o.primary_key? && o.type != :primary_key
@@ -116,6 +110,10 @@ module ActiveRecord
               AND c.relname = '#{name.identifier}'
               AND n.nspname = #{name.schema ? "'#{name.schema}'" : 'ANY (current_schemas(false))'}
           SQL
+        end
+
+        def drop_table(table_name, options = {})
+          execute "DROP TABLE #{quote_table_name(table_name)}#{' CASCADE' if options[:force] == :cascade}"
         end
 
         # Returns true if schema exists.
@@ -230,6 +228,17 @@ module ActiveRecord
           @schema_search_path ||= query('SHOW search_path', 'SCHEMA')[0][0]
         end
 
+        # Returns the current client message level.
+        def client_min_messages
+          query('SHOW client_min_messages', 'SCHEMA')[0][0]
+        end
+
+        # Set the client message level.
+        def client_min_messages=(level)
+          # can't set client_min_messages in redshift
+          # execute("SET client_min_messages TO '#{level}'", 'SCHEMA')
+        end
+
         # Returns the sequence name for a table's primary key or some other specified key.
         def default_sequence_name(table_name, pk = nil) #:nodoc:
           result = serial_sequence(table_name, pk || 'id')
@@ -244,6 +253,23 @@ module ActiveRecord
             SELECT pg_get_serial_sequence('#{table}', '#{column}')
           eosql
           result.rows.first.first
+        end
+
+        # Sets the sequence of a table's primary key to the specified value.
+        def set_pk_sequence!(table, value) #:nodoc:
+          pk, sequence = pk_and_sequence_for(table)
+
+          if pk
+            if sequence
+              quoted_sequence = quote_table_name(sequence)
+
+              select_value <<-end_sql, 'SCHEMA'
+              SELECT setval('#{quoted_sequence}', #{value})
+              end_sql
+            else
+              @logger.warn "#{table} has primary key #{pk} with no default sequence" if @logger
+            end
+          end
         end
 
         # Resets the sequence of a table's primary key to the maximum value.
@@ -324,7 +350,7 @@ module ActiveRecord
 
         # Returns just a table's primary key
         def primary_key(table)
-          row = exec_query(<<-end_sql, 'SCHEMA').rows.first
+          pks = exec_query(<<-end_sql, 'SCHEMA').rows
             SELECT DISTINCT attr.attname
             FROM pg_attribute attr
             INNER JOIN pg_depend dep ON attr.attrelid = dep.refobjid AND attr.attnum = dep.refobjsubid
@@ -333,7 +359,8 @@ module ActiveRecord
               AND dep.refobjid = '#{quote_table_name(table)}'::regclass
           end_sql
 
-          row && row.first
+          return nil unless pks.count == 1
+          pks[0][0]
         end
 
         # Renames a table.
@@ -348,7 +375,10 @@ module ActiveRecord
           pk, seq = pk_and_sequence_for(new_name)
           if seq && seq.identifier == "#{table_name}_#{pk}_seq"
             new_seq = "#{new_name}_#{pk}_seq"
+            idx = "#{table_name}_pkey"
+            new_idx = "#{new_name}_pkey"
             execute "ALTER TABLE #{quote_table_name(seq)} RENAME TO #{quote_table_name(new_seq)}"
+            execute "ALTER INDEX #{quote_table_name(idx)} RENAME TO #{quote_table_name(new_idx)}"
           end
 
           rename_table_indexes(table_name, new_name)
@@ -367,7 +397,12 @@ module ActiveRecord
           quoted_table_name = quote_table_name(table_name)
           sql_type = type_to_sql(type, options[:limit], options[:precision], options[:scale])
           sql_type << "[]" if options[:array]
-          execute "ALTER TABLE #{quoted_table_name} ALTER COLUMN #{quote_column_name(column_name)} TYPE #{sql_type}"
+          sql = "ALTER TABLE #{quoted_table_name} ALTER COLUMN #{quote_column_name(column_name)} TYPE #{sql_type}"
+          sql << " USING #{options[:using]}" if options[:using]
+          if options[:cast_as]
+            sql << " USING CAST(#{quote_column_name(column_name)} AS #{type_to_sql(options[:cast_as], options[:limit], options[:precision], options[:scale])})"
+          end
+          execute sql
 
           change_column_default(table_name, column_name, options[:default]) if options_include_default?(options)
           change_column_null(table_name, column_name, options[:null], options[:default]) if options.key?(:null)
@@ -414,6 +449,9 @@ module ActiveRecord
         end
 
         def rename_index(table_name, old_name, new_name)
+          validate_index_length!(table_name, new_name)
+
+          execute "ALTER INDEX #{quote_column_name(old_name)} RENAME TO #{quote_table_name(new_name)}"
           # ignore
         end
 

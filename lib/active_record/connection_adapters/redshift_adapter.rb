@@ -13,7 +13,7 @@ require 'active_record/connection_adapters/redshift/database_statements'
 require 'arel/visitors/bind_visitor'
 
 # Make sure we're using pg high enough for PGResult#values
-gem 'pg', '~> 0.11'
+gem 'pg', '~> 0.15'
 require 'pg'
 
 require 'ipaddr'
@@ -78,6 +78,7 @@ module ActiveRecord
 
       NATIVE_DATABASE_TYPES = {
         primary_key: "serial primary key",
+        bigserial: "bigserial",
         string:      { name: "character varying" },
         text:        { name: "text" },
         integer:     { name: "integer" },
@@ -94,6 +95,7 @@ module ActiveRecord
         int8range:   { name: "int8range" },
         binary:      { name: "bytea" },
         boolean:     { name: "boolean" },
+        bigint:      { name: "bigint" },
         xml:         { name: "xml" },
         tsvector:    { name: "tsvector" },
         hstore:      { name: "hstore" },
@@ -102,6 +104,7 @@ module ActiveRecord
         macaddr:     { name: "macaddr" },
         uuid:        { name: "uuid" },
         json:        { name: "json" },
+        jsonb:       { name: "jsonb" },
         ltree:       { name: "ltree" },
         citext:      { name: "citext" },
         point:       { name: "point" },
@@ -122,7 +125,7 @@ module ActiveRecord
         Redshift::SchemaCreation.new self
       end
 
-      # Adds `:array` option to the default set provided by the
+      # Adds +:array+ option to the default set provided by the
       # AbstractAdapter
       def prepare_column_options(column, types) # :nodoc:
         spec = super
@@ -131,7 +134,7 @@ module ActiveRecord
         spec
       end
 
-      # Adds `:array` as a valid migration key
+      # Adds +:array+ as a valid migration key
       def migration_keys
         super + [:array]
       end
@@ -380,6 +383,16 @@ module ActiveRecord
         super(oid)
       end
 
+      def column_name_for_operation(operation, node) # :nodoc:
+        OPERATION_ALIASES.fetch(operation) { operation.downcase }
+      end
+
+      OPERATION_ALIASES = { # :nodoc:
+        "maximum" => "max",
+        "minimum" => "min",
+        "average" => "avg",
+      }
+
       protected
 
         # Returns the version of the connected PostgreSQL server.
@@ -421,8 +434,8 @@ module ActiveRecord
 
         def initialize_type_map(m) # :nodoc:
           register_class_with_limit m, 'int2', OID::Integer
-          m.alias_type 'int4', 'int2'
-          m.alias_type 'int8', 'int2'
+          register_class_with_limit m, 'int4', OID::Integer
+          register_class_with_limit m, 'int8', OID::Integer
           m.alias_type 'oid', 'int2'
           m.register_type 'float4', OID::Float.new
           m.alias_type 'float8', 'float4'
@@ -492,9 +505,12 @@ module ActiveRecord
 
         def extract_limit(sql_type) # :nodoc:
           case sql_type
-          when /^bigint/i;    8
-          when /^smallint/i;  2
-          else super
+          when /^bigint/i, /^int8/i
+            8
+          when /^smallint/i
+            2
+          else
+            super
           end
         end
 
@@ -508,7 +524,7 @@ module ActiveRecord
             when 'true', 'false'
               default
             # Numeric types
-            when /\A\(?(-?\d+(\.\d*)?\)?)\z/
+            when /\A\(?(-?\d+(\.\d*)?)\)?(::bigint)?\z/
               $1
             # Object identifier types
             when /\A-?\d+\z/
@@ -572,9 +588,7 @@ module ActiveRecord
           }
 
           log(sql, name, type_casted_binds, stmt_key) do
-            @connection.send_query_prepared(stmt_key, type_casted_binds.map { |_, val| val })
-            @connection.block
-            @connection.get_last_result
+            @connection.exec_prepared(stmt_key, type_casted_binds.map { |_, val| val })
           end
         rescue ActiveRecord::StatementInvalid => e
           pgerror = e.original_exception
@@ -583,7 +597,11 @@ module ActiveRecord
           # prepared statements whose return value may have changed is
           # FEATURE_NOT_SUPPORTED.  Check here for more details:
           # http://git.postgresql.org/gitweb/?p=postgresql.git;a=blob;f=src/backend/utils/cache/plancache.c#l573
-          code = pgerror.result.result_error_field(PGresult::PG_DIAG_SQLSTATE)
+          begin
+            code = pgerror.result.result_error_field(PGresult::PG_DIAG_SQLSTATE)
+          rescue
+            raise e
+          end
           if FEATURE_NOT_SUPPORTED == code
             @statements.delete sql_key(sql)
             retry
@@ -649,9 +667,9 @@ module ActiveRecord
           variables.map do |k, v|
             if v == ':default' || v == :default
               # Sets the value to the global or compile default
-              execute("SET SESSION #{k.to_s} TO DEFAULT", 'SCHEMA')
+              execute("SET SESSION #{k} TO DEFAULT", 'SCHEMA')
             elsif !v.nil?
-              execute("SET SESSION #{k.to_s} TO #{quote(v)}", 'SCHEMA')
+              execute("SET SESSION #{k} TO #{quote(v)}", 'SCHEMA')
             end
           end
         end
@@ -667,12 +685,6 @@ module ActiveRecord
 
         def last_insert_id_result(sequence_name) #:nodoc:
           exec_query("SELECT currval('#{sequence_name}')", 'SQL')
-        end
-
-        # Executes a SELECT query and returns the results, performing any data type
-        # conversions that are required to be performed here instead of in PostgreSQLColumn.
-        def select(sql, name = nil, binds = [])
-          exec_query(sql, name, binds)
         end
 
         # Returns the list of a table's column names, data types, and default values.
