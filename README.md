@@ -2,7 +2,7 @@ activerecord4-redshift-adapter
 ==============================
 
 Amazon Redshift adapter for ActiveRecord 4 (Rails 4).
-Almost all code are copied from ActiveRecord 4.2.0.beta2 PostgreSQL
+Almost all code are copied from ActiveRecord 4.2.0 PostgreSQL
 driver and modified for Redshift.
 
 Forked and heavily modified from (https://github.com/aamine/activerecord4-redshift-adapter). 
