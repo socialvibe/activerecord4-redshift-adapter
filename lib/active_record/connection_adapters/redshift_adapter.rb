@@ -77,7 +77,7 @@ module ActiveRecord
       ADAPTER_NAME = 'Redshift'.freeze
 
       NATIVE_DATABASE_TYPES = {
-        primary_key: "serial primary key",
+        primary_key: "integer increment",
         bigserial: "bigserial",
         string:      { name: "character varying" },
         text:        { name: "text" },
