@@ -499,6 +499,8 @@ module ActiveRecord
         # Maps logical Rails types to PostgreSQL-specific data types.
         def type_to_sql(type, limit = nil, precision = nil, scale = nil)
           case type.to_s
+          when 'boolean'
+            super(type)
           when 'binary'
             # PostgreSQL doesn't support limits on binary (bytea) columns.
             # The hard limit is 1Gb, because of a 32-bit size field, and TOAST.
