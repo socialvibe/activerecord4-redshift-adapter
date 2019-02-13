@@ -20,7 +20,7 @@ require 'ipaddr'
 
 module ActiveRecord
   module ConnectionHandling # :nodoc:
-    VALID_CONN_PARAMS = [:host, :hostaddr, :port, :dbname, :user, :password, :connect_timeout,
+    VALID_REDSHIFT_CONN_PARAMS = [:host, :hostaddr, :port, :dbname, :user, :password, :connect_timeout,
                          :client_encoding, :options, :application_name, :fallback_application_name,
                          :keepalives, :keepalives_idle, :keepalives_interval, :keepalives_count,
                          :tty, :sslmode, :requiressl, :sslcompression, :sslcert, :sslkey,
@@ -37,7 +37,7 @@ module ActiveRecord
       conn_params[:dbname] = conn_params.delete(:database) if conn_params[:database]
 
       # Forward only valid config params to PGconn.connect.
-      conn_params.keep_if { |k, _| VALID_CONN_PARAMS.include?(k) }
+      conn_params.keep_if { |k, _| VALID_REDSHIFT_CONN_PARAMS.include?(k) }
 
       # The postgres drivers don't allow the creation of an unconnected PGconn object,
       # so just pass a nil connection object for the time being.
